@@ -25,16 +25,18 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script>
 const firebaseConfig={apiKey:"AIzaSyAlTTJG-akfZYXMzGJdPmbz4HXOfa-Ro2w",authDomain:"eokeogi.firebaseapp.com",projectId:"eokeogi",storageBucket:"eokeogi.firebasestorage.app",messagingSenderId:"268722870371",appId:"1:268722870371:web:6f718993fc1cc3292b0056"};
-const GOAL=100000000,RATE=.02,PRINCIPAL_A=2000000,PRINCIPAL_B=3542844,INITIAL_B_PROFIT=351431,CACHE_KEY='eokeogi-cache-v2',$=id=>document.getElementById(id);
+const GOAL=100000000,RATE=.02,PRINCIPAL_A=2000000,PRINCIPAL_B=3542844,INITIAL_B_PROFIT=351431,RECOVERED_A_PROFIT=345000,RECOVERED_B_PROFIT=1451505,CACHE_KEY='eokeogi-cache-v2',LEGACY_KEY='eokeogi_v8',$=id=>document.getElementById(id);
 const FIXED_B_DATES=['2026-07-17','2026-07-20','2026-07-21','2026-07-22','2026-07-23','2026-07-24'];
 let entries=[],chartRange='week',db=null,ref=null,remoteAvailable=false;
 function todayStr(){const d=new Date(),o=d.getTimezoneOffset();return new Date(d.getTime()-o*60000).toISOString().slice(0,10)}
 function addDays(s,n){const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);const o=d.getTimezoneOffset();return new Date(d.getTime()-o*60000).toISOString().slice(0,10)}
 function baseEntries(){return[{id:'seed-a-1',date:'2026-07-24',writer:'허성은',gainA:73049,gainB:0,memo:'초기 수익',seed:true,createdAt:100},{id:'seed-a-2',date:'2026-07-25',writer:'허성은',gainA:100000,gainB:0,memo:'초기 수익',seed:true,createdAt:101}]}
 function bSplitEntries(){const q=Math.floor(INITIAL_B_PROFIT/6),rem=INITIAL_B_PROFIT-q*6;return FIXED_B_DATES.map((date,i)=>({id:'seed-b-'+i,date,writer:'김도영',gainA:0,gainB:q+(i<rem?1:0),memo:'기존 누적 실현수익 6거래일 배분',seed:true,createdAt:200+i}))}
-function seedEntries(){return[...baseEntries(),...bSplitEntries()]}
-function normalizeEntries(src){const arr=(Array.isArray(src)?src:[]).map((e,i)=>({...e,id:e.id||('legacy-'+(e.createdAt||Date.now())+'-'+i)}));const keep=arr.filter(e=>!(e.writer==='김도영'&&e.seed&&(e.memo==='기존 실현수익 배분'||e.memo==='기존 누적 실현수익 기준 반영'||e.memo==='기존 누적 실현수익 6거래일 배분')));return[...keep,...bSplitEntries()]}
-function loadCache(){try{const raw=localStorage.getItem(CACHE_KEY);if(!raw)return null;const v=JSON.parse(raw);return Array.isArray(v)?normalizeEntries(v):null}catch(e){return null}}
+function ensureRecovered(arr){const out=[...arr];const a=out.filter(e=>e.writer==='허성은').reduce((s,e)=>s+Number(e.gainA||0),0),b=out.filter(e=>e.writer==='김도영').reduce((s,e)=>s+Number(e.gainB||0),0);if(a<RECOVERED_A_PROFIT)out.push({id:'recovery-a-20260811',date:'2026-08-11',writer:'허성은',gainA:RECOVERED_A_PROFIT-a,gainB:0,memo:'8/11 확인 누적수익 복구',seed:true,createdAt:900});if(b<RECOVERED_B_PROFIT)out.push({id:'recovery-b-20260811',date:'2026-08-11',writer:'김도영',gainA:0,gainB:RECOVERED_B_PROFIT-b,memo:'8/11 확인 누적 실현수익 복구',seed:true,createdAt:901});return out}
+function seedEntries(){return ensureRecovered([...baseEntries(),...bSplitEntries()])}
+function normalizeEntries(src){const arr=(Array.isArray(src)?src:[]).map((e,i)=>({...e,id:e.id||('legacy-'+(e.createdAt||Date.now())+'-'+i)}));const keep=arr.filter(e=>e.id!=='recovery-a-20260811'&&e.id!=='recovery-b-20260811'&&!(e.writer==='김도영'&&e.seed&&(e.memo==='기존 실현수익 배분'||e.memo==='기존 누적 실현수익 기준 반영'||e.memo==='기존 누적 실현수익 6거래일 배분')));return ensureRecovered([...keep,...bSplitEntries()])}
+function extractEntries(v){if(Array.isArray(v))return v;if(v&&Array.isArray(v.entries))return v.entries;return null}
+function loadCache(){try{const candidates=[];[CACHE_KEY,LEGACY_KEY].forEach(k=>{const raw=localStorage.getItem(k);if(!raw)return;const a=extractEntries(JSON.parse(raw));if(a)candidates.push(normalizeEntries(a))});if(!candidates.length)return null;return candidates.sort((x,y)=>{const sx=x.reduce((s,e)=>s+Number(e.gainA||0)+Number(e.gainB||0),0),sy=y.reduce((s,e)=>s+Number(e.gainA||0)+Number(e.gainB||0),0);return sy-sx})[0]}catch(e){return null}}
 function saveCache(){try{localStorage.setItem(CACHE_KEY,JSON.stringify(entries))}catch(e){}}
 function won(v){const s=v<0?'-':'';return s+'₩'+Math.abs(Math.round(v)).toLocaleString('ko-KR')}
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
